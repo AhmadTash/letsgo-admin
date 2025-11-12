@@ -13,6 +13,7 @@ import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -74,6 +75,8 @@ export default function Page(): React.JSX.Element {
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [filterGender, setFilterGender] = React.useState<string>('');
   const [filterPaymentStatus, setFilterPaymentStatus] = React.useState<string>('');
+  const [startDate, setStartDate] = React.useState<string>('');
+  const [endDate, setEndDate] = React.useState<string>('');
 
   // Prepare all trainers data
   const allTrainers = React.useMemo(() => {
@@ -95,7 +98,7 @@ export default function Page(): React.JSX.Element {
   // Reset page when search query or filters change
   React.useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterGender, filterPaymentStatus]);
+  }, [searchQuery, filterGender, filterPaymentStatus, startDate, endDate]);
 
   // Filter trainers based on search query and filters
   const filteredTrainers = React.useMemo(() => {
@@ -115,6 +118,27 @@ export default function Page(): React.JSX.Element {
       } else if (filterPaymentStatus === 'none') {
         filtered = filtered.filter((trainer) => !trainer.paymentInfo);
       }
+    }
+
+    // Apply date range filter (based on local timezone)
+    if (startDate || endDate) {
+      filtered = filtered.filter((trainer) => {
+        if (!trainer.joiningTimestamp) return false;
+        const timestamp = trainer.joiningTimestamp > 1e12 
+          ? trainer.joiningTimestamp 
+          : trainer.joiningTimestamp * 1000;
+        // Convert timestamp to local date string (YYYY-MM-DD) to match what's displayed in table
+        const trainerDateStr = dayjs(timestamp).format('YYYY-MM-DD');
+        
+        if (startDate && endDate) {
+          return trainerDateStr >= startDate && trainerDateStr <= endDate;
+        } else if (startDate) {
+          return trainerDateStr >= startDate;
+        } else if (endDate) {
+          return trainerDateStr <= endDate;
+        }
+        return true;
+      });
     }
 
     // Apply search query filter
@@ -142,7 +166,7 @@ export default function Page(): React.JSX.Element {
     }
 
     return filtered;
-  }, [allTrainers, searchQuery, filterGender, filterPaymentStatus]);
+  }, [allTrainers, searchQuery, filterGender, filterPaymentStatus, startDate, endDate]);
 
   // Sort trainers
   const trainers = React.useMemo(() => {
@@ -240,41 +264,94 @@ export default function Page(): React.JSX.Element {
     <Stack spacing={3}>
       <Typography variant="h4">Trainers</Typography>
 
-      <Card sx={{ p: 2 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Gender</InputLabel>
-            <Select
-              value={filterGender}
-              label="Gender"
-              onChange={(e) => setFilterGender(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>All Genders</em>
-              </MenuItem>
-              {genderOptions.map((gender) => (
-                <MenuItem key={gender} value={gender}>
-                  {gender}
+      <Card sx={{ p: 1.5 }}>
+        <Box
+          sx={{
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            '&::-webkit-scrollbar': {
+              height: 6,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0,0,0,0.2)',
+              borderRadius: 3,
+            },
+            mx: { xs: -1.5, sm: 0 },
+            px: { xs: 1.5, sm: 0 },
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1.5}
+            p={1}
+            flexWrap={{ xs: 'nowrap', sm: 'wrap' }}
+            sx={{ minWidth: 'max-content' }}
+          >
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Gender</InputLabel>
+              <Select
+                value={filterGender}
+                label="Gender"
+                onChange={(e) => {
+                  setFilterGender(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Genders</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Payment Status</InputLabel>
-            <Select
-              value={filterPaymentStatus}
-              label="Payment Status"
-              onChange={(e) => setFilterPaymentStatus(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>All Statuses</em>
-              </MenuItem>
-              <MenuItem value="confirmed">Confirmed</MenuItem>
-              <MenuItem value="unconfirmed">Unconfirmed</MenuItem>
-              <MenuItem value="none">No Payment Info</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
+                {genderOptions.map((gender) => (
+                  <MenuItem key={gender} value={gender}>
+                    {gender}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 185, flexShrink: 0 }}>
+              <InputLabel>Payment Status</InputLabel>
+              <Select
+                value={filterPaymentStatus}
+                label="Payment Status"
+                onChange={(e) => {
+                  setFilterPaymentStatus(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Statuses</em>
+                </MenuItem>
+                <MenuItem value="confirmed">Confirmed</MenuItem>
+                <MenuItem value="unconfirmed">Unconfirmed</MenuItem>
+                <MenuItem value="none">No Payment Info</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
+              label="Start Date"
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+              }}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+            <TextField
+              size="small"
+              label="End Date"
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+              }}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+          </Stack>
+        </Box>
       </Card>
 
       <Card>

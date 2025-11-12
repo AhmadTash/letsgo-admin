@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import RouterLink from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -10,24 +10,34 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Unstable_Grid2';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { ArrowLeft as ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft';
 import dayjs from 'dayjs';
 
 import { paths } from '@/paths';
-import { useGetStudentsQuery } from '@/store';
+import { useGetStudentsQuery, useGetJobsQuery } from '@/store';
 import type { Student } from '@/types/student';
+import type { Job } from '@/types/job';
 import { LocationMap } from '@/components/dashboard/location-map';
+import { formatStatus, getStatusColor } from '@/lib/format-status';
 
 export default function Page(): React.JSX.Element {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id ? parseInt(params.id as string, 10) : null;
   const { data, isLoading, error } = useGetStudentsQuery();
+  const { data: jobsData, isLoading: isLoadingJobs } = useGetJobsQuery();
 
   if (isLoading) {
     return (
@@ -55,6 +65,12 @@ export default function Page(): React.JSX.Element {
         ? dayjs(student.joiningTimestamp).format('MMMM D, YYYY')
         : dayjs.unix(student.joiningTimestamp).format('MMMM D, YYYY'))
     : 'N/A';
+
+  // Filter jobs by customer ID (student ID)
+  const studentJobs = React.useMemo(() => {
+    if (!id || !jobsData?.jobs) return [];
+    return jobsData.jobs.filter((job: Job) => job.customerId === id);
+  }, [id, jobsData?.jobs]);
 
   return (
     <Stack spacing={3}>
@@ -219,6 +235,97 @@ export default function Page(): React.JSX.Element {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Student's Jobs Table */}
+      <Card>
+        <CardHeader title="Student's Jobs" />
+        <Divider />
+        {isLoadingJobs ? (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: '800px' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Job ID</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Trainer ID</TableCell>
+                  <TableCell>Duration</TableCell>
+                  <TableCell>Total Price</TableCell>
+                  <TableCell>Created Date</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {studentJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center">
+                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+                        No jobs found for this student
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  studentJobs.map((job: Job) => {
+                    const createdDate = job.timing?.createTimestamp !== null && job.timing?.createTimestamp !== undefined
+                      ? (job.timing.createTimestamp > 1e12
+                          ? dayjs(job.timing.createTimestamp).format('MMM D, YYYY')
+                          : dayjs.unix(job.timing.createTimestamp).format('MMM D, YYYY'))
+                      : 'N/A';
+                    const totalPrice = job.pricing?.totalPrice ? `$${job.pricing.totalPrice.toFixed(2)}` : 'N/A';
+
+                    return (
+                      <TableRow
+                        hover
+                        key={job.id || Math.random()}
+                        onClick={() => {
+                          if (job.id) {
+                            router.push(`${paths.dashboard.jobs}/${job.id.toString()}`);
+                          }
+                        }}
+                        sx={{ cursor: job.id ? 'pointer' : 'default' }}
+                      >
+                        <TableCell>
+                          <Typography variant="subtitle2">#{job.id || 'N/A'}</Typography>
+                        </TableCell>
+                        <TableCell>{job.type || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={formatStatus(job.currentStatus)}
+                            color={getStatusColor(job.currentStatus)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {job.trainerId ? (
+                            <Link
+                              component={RouterLink}
+                              href={`${paths.dashboard.trainers}/${job.trainerId.toString()}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {job.trainerId}
+                            </Link>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
+                        <TableCell>{job.durationInHours ? `${job.durationInHours}h` : 'N/A'}</TableCell>
+                        <TableCell>{totalPrice}</TableCell>
+                        <TableCell>{createdDate}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Card>
     </Stack>
   );
 }

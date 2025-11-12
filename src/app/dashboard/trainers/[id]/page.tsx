@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import RouterLink from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -16,19 +16,30 @@ import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Unstable_Grid2';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { ArrowLeft as ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft';
 import dayjs from 'dayjs';
 
 import { paths } from '@/paths';
-import { useGetTrainersQuery } from '@/store';
+import { useGetTrainersQuery, useGetJobsQuery, useGetStudentsQuery } from '@/store';
 import type { Trainer } from '@/types/trainer';
+import type { Job } from '@/types/job';
+import type { Student } from '@/types/student';
 import { LocationMap } from '@/components/dashboard/location-map';
+import { formatStatus, getStatusColor } from '@/lib/format-status';
 
 export default function Page(): React.JSX.Element {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id ? parseInt(params.id as string, 10) : null;
   const { data, isLoading, error } = useGetTrainersQuery();
+  const { data: jobsData, isLoading: isLoadingJobs } = useGetJobsQuery();
+  const { data: studentsData, isLoading: isLoadingStudents } = useGetStudentsQuery();
 
   if (isLoading) {
     return (
@@ -62,6 +73,31 @@ export default function Page(): React.JSX.Element {
     ? 'Unconfirmed'
     : 'N/A';
   const paymentStatusColor = trainer?.paymentInfo?.confirmed ? 'success' : trainer?.paymentInfo ? 'warning' : 'default';
+
+  // Filter jobs by trainer ID
+  const trainerJobs = React.useMemo(() => {
+    if (!id || !jobsData?.jobs) return [];
+    return jobsData.jobs.filter((job: Job) => job.trainerId === id);
+  }, [id, jobsData?.jobs]);
+
+  // Extract unique customer IDs from trainer's jobs
+  const customerIds = React.useMemo(() => {
+    const ids = new Set<number>();
+    trainerJobs.forEach((job: Job) => {
+      if (job.customerId) {
+        ids.add(job.customerId);
+      }
+    });
+    return Array.from(ids);
+  }, [trainerJobs]);
+
+  // Filter students by customer IDs from jobs
+  const trainerStudents = React.useMemo(() => {
+    if (!studentsData?.students || customerIds.length === 0) return [];
+    return studentsData.students.filter((student: Student) => 
+      student.id !== null && student.id !== undefined && customerIds.includes(student.id)
+    );
+  }, [studentsData?.students, customerIds]);
 
   return (
     <Stack spacing={3}>
@@ -326,6 +362,199 @@ export default function Page(): React.JSX.Element {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Trainer's Jobs Table */}
+      <Card>
+        <CardHeader title="Trainer's Jobs" />
+        <Divider />
+        {isLoadingJobs ? (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: '800px' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Job ID</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Customer ID</TableCell>
+                  <TableCell>Duration</TableCell>
+                  <TableCell>Total Price</TableCell>
+                  <TableCell>Created Date</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {trainerJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center">
+                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+                        No jobs found for this trainer
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  trainerJobs.map((job: Job) => {
+                    const createdDate = job.timing?.createTimestamp !== null && job.timing?.createTimestamp !== undefined
+                      ? (job.timing.createTimestamp > 1e12
+                          ? dayjs(job.timing.createTimestamp).format('MMM D, YYYY')
+                          : dayjs.unix(job.timing.createTimestamp).format('MMM D, YYYY'))
+                      : 'N/A';
+                    const totalPrice = job.pricing?.totalPrice ? `$${job.pricing.totalPrice.toFixed(2)}` : 'N/A';
+
+                    return (
+                      <TableRow
+                        hover
+                        key={job.id || Math.random()}
+                        onClick={() => {
+                          if (job.id) {
+                            router.push(`${paths.dashboard.jobs}/${job.id.toString()}`);
+                          }
+                        }}
+                        sx={{ cursor: job.id ? 'pointer' : 'default' }}
+                      >
+                        <TableCell>
+                          <Typography variant="subtitle2">#{job.id || 'N/A'}</Typography>
+                        </TableCell>
+                        <TableCell>{job.type || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={formatStatus(job.currentStatus)}
+                            color={getStatusColor(job.currentStatus)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {job.customerId ? (
+                            <Link
+                              component={RouterLink}
+                              href={`${paths.dashboard.students}/${job.customerId.toString()}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {job.customerId}
+                            </Link>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
+                        <TableCell>{job.durationInHours ? `${job.durationInHours}h` : 'N/A'}</TableCell>
+                        <TableCell>{totalPrice}</TableCell>
+                        <TableCell>{createdDate}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Card>
+
+      {/* Trainer's Students Table */}
+      <Card>
+        <CardHeader title="Trainer's Students" />
+        <Divider />
+        {isLoadingStudents ? (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: '800px' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Student ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Mobile Number</TableCell>
+                  <TableCell>Age</TableCell>
+                  <TableCell>Location</TableCell>
+                  <TableCell>Default School</TableCell>
+                  <TableCell>Joining Date</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {trainerStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center">
+                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+                        No students found for this trainer
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  trainerStudents.map((student: Student) => {
+                    const fullName = [student.firstName, student.lastName].filter(Boolean).join(' ') || 'N/A';
+                    const joiningDate = student.joiningTimestamp !== null && student.joiningTimestamp !== undefined
+                      ? (student.joiningTimestamp > 1e12
+                          ? dayjs(student.joiningTimestamp).format('MMM D, YYYY')
+                          : dayjs.unix(student.joiningTimestamp).format('MMM D, YYYY'))
+                      : 'N/A';
+
+                    return (
+                      <TableRow
+                        hover
+                        key={student.id || Math.random()}
+                        onClick={() => {
+                          if (student.id) {
+                            router.push(`${paths.dashboard.students}/${student.id.toString()}`);
+                          }
+                        }}
+                        sx={{ cursor: student.id ? 'pointer' : 'default' }}
+                      >
+                        <TableCell>
+                          <Typography variant="subtitle2">#{student.id || 'N/A'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="subtitle2">{fullName}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          {student.email ? (
+                            <Link
+                              href={`mailto:${student.email}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {student.email}
+                            </Link>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {student.mobileNumber ? (
+                            <Link
+                              href={`tel:${student.mobileNumber}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {student.mobileNumber}
+                            </Link>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
+                        <TableCell>{student.age ?? 'N/A'}</TableCell>
+                        <TableCell>{student.locationDetails || 'N/A'}</TableCell>
+                        <TableCell>{student.defaultSchool || 'N/A'}</TableCell>
+                        <TableCell>{joiningDate}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Card>
     </Stack>
   );
 }

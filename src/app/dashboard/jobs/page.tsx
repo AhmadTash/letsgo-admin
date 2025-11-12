@@ -14,6 +14,7 @@ import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -80,6 +81,8 @@ export default function Page(): React.JSX.Element {
   const [filterTrainerId, setFilterTrainerId] = React.useState<string>('');
   const [filterCustomerId, setFilterCustomerId] = React.useState<string>('');
   const [filterDuration, setFilterDuration] = React.useState<string>('');
+  const [startDate, setStartDate] = React.useState<string>('');
+  const [endDate, setEndDate] = React.useState<string>('');
 
   const allJobs = React.useMemo(() => {
     return data?.jobs || [];
@@ -129,7 +132,7 @@ export default function Page(): React.JSX.Element {
   // Reset page when search query or filters change
   React.useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterType, filterStatus, filterTrainerId, filterCustomerId, filterDuration]);
+  }, [searchQuery, filterType, filterStatus, filterTrainerId, filterCustomerId, filterDuration, startDate, endDate]);
 
   // Filter jobs based on search query and filters
   const filteredJobs = React.useMemo(() => {
@@ -176,6 +179,27 @@ export default function Page(): React.JSX.Element {
       });
     }
 
+    // Apply date range filter (based on local timezone)
+    if (startDate || endDate) {
+      filtered = filtered.filter((job: Job) => {
+        if (!job.timing?.createTimestamp) return false;
+        const timestamp = job.timing.createTimestamp > 1e12 
+          ? job.timing.createTimestamp 
+          : job.timing.createTimestamp * 1000;
+        // Convert timestamp to local date string (YYYY-MM-DD) to match what's displayed in table
+        const jobDateStr = dayjs(timestamp).format('YYYY-MM-DD');
+        
+        if (startDate && endDate) {
+          return jobDateStr >= startDate && jobDateStr <= endDate;
+        } else if (startDate) {
+          return jobDateStr >= startDate;
+        } else if (endDate) {
+          return jobDateStr <= endDate;
+        }
+        return true;
+      });
+    }
+
     // Apply search query filter
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
@@ -199,7 +223,7 @@ export default function Page(): React.JSX.Element {
     }
 
     return filtered;
-  }, [allJobs, searchQuery, filterType, filterStatus, filterTrainerId, filterCustomerId, filterDuration]);
+  }, [allJobs, searchQuery, filterType, filterStatus, filterTrainerId, filterCustomerId, filterDuration, startDate, endDate]);
 
   // Sort jobs
   const jobs = React.useMemo(() => {
@@ -289,104 +313,153 @@ export default function Page(): React.JSX.Element {
     <Stack spacing={3}>
       <Typography variant="h4">Jobs</Typography>
 
-      <Card sx={{ p: 2 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Type</InputLabel>
-            <Select
-              value={filterType}
-              label="Type"
-              onChange={(e) => {
-                setFilterType(e.target.value);
-              }}
-            >
-              <MenuItem value="">
-                <em>All Types</em>
-              </MenuItem>
-              {typeOptions.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type}
+      <Card sx={{ p: 1.5 }}>
+        <Box
+          sx={{
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            '&::-webkit-scrollbar': {
+              height: 6,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0,0,0,0.2)',
+              borderRadius: 3,
+            },
+            mx: { xs: -1.5, sm: 0 },
+            px: { xs: 1.5, sm: 0 },
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1.5}
+            p={1}
+            flexWrap={{ xs: 'nowrap', sm: 'wrap' }}
+            sx={{ minWidth: 'max-content' }}
+          >
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Type</InputLabel>
+              <Select
+                value={filterType}
+                label="Type"
+                onChange={(e) => {
+                  setFilterType(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Types</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={filterStatus}
-              label="Status"
-              onChange={(e) => {
-                setFilterStatus(e.target.value);
-              }}
-            >
-              <MenuItem value="">
-                <em>All Statuses</em>
-              </MenuItem>
-              {statusOptions.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {formatStatus(status)}
+                {typeOptions.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={filterStatus}
+                label="Status"
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Statuses</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Trainer ID</InputLabel>
-            <Select
-              value={filterTrainerId}
-              label="Trainer ID"
-              onChange={(e) => {
-                setFilterTrainerId(e.target.value);
-              }}
-            >
-              <MenuItem value="">
-                <em>All Trainers</em>
-              </MenuItem>
-              {trainerIdOptions.map((trainerId) => (
-                <MenuItem key={trainerId} value={trainerId}>
-                  {trainerId}
+                {statusOptions.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {formatStatus(status)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Trainer ID</InputLabel>
+              <Select
+                value={filterTrainerId}
+                label="Trainer ID"
+                onChange={(e) => {
+                  setFilterTrainerId(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Trainers</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Customer ID</InputLabel>
-            <Select
-              value={filterCustomerId}
-              label="Customer ID"
-              onChange={(e) => {
-                setFilterCustomerId(e.target.value);
-              }}
-            >
-              <MenuItem value="">
-                <em>All Customers</em>
-              </MenuItem>
-              {customerIdOptions.map((customerId) => (
-                <MenuItem key={customerId} value={customerId}>
-                  {customerId}
+                {trainerIdOptions.map((trainerId) => (
+                  <MenuItem key={trainerId} value={trainerId}>
+                    {trainerId}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Customer ID</InputLabel>
+              <Select
+                value={filterCustomerId}
+                label="Customer ID"
+                onChange={(e) => {
+                  setFilterCustomerId(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Customers</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Duration</InputLabel>
-            <Select
-              value={filterDuration}
-              label="Duration"
+                {customerIdOptions.map((customerId) => (
+                  <MenuItem key={customerId} value={customerId}>
+                    {customerId}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>Duration</InputLabel>
+              <Select
+                value={filterDuration}
+                label="Duration"
+                onChange={(e) => {
+                  setFilterDuration(e.target.value);
+                }}
+              >
+                <MenuItem value="">
+                  <em>All Durations</em>
+                </MenuItem>
+                <MenuItem value="0-1">0-1 hours</MenuItem>
+                <MenuItem value="1-2">1-2 hours</MenuItem>
+                <MenuItem value="2-5">2-5 hours</MenuItem>
+                <MenuItem value="5-10">5-10 hours</MenuItem>
+                <MenuItem value="10+">10+ hours</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
+              label="Start Date"
+              type="date"
+              value={startDate}
               onChange={(e) => {
-                setFilterDuration(e.target.value);
+                setStartDate(e.target.value);
               }}
-            >
-              <MenuItem value="">
-                <em>All Durations</em>
-              </MenuItem>
-              <MenuItem value="0-1">0-1 hours</MenuItem>
-              <MenuItem value="1-2">1-2 hours</MenuItem>
-              <MenuItem value="2-5">2-5 hours</MenuItem>
-              <MenuItem value="5-10">5-10 hours</MenuItem>
-              <MenuItem value="10+">10+ hours</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+            <TextField
+              size="small"
+              label="End Date"
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+              }}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+          </Stack>
+        </Box>
       </Card>
 
       <Card>

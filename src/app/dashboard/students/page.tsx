@@ -12,6 +12,7 @@ import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -72,6 +73,8 @@ export default function Page(): React.JSX.Element {
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [filterSchool, setFilterSchool] = React.useState<string>('');
+  const [startDate, setStartDate] = React.useState<string>('');
+  const [endDate, setEndDate] = React.useState<string>('');
 
   // Prepare all students data
   const allStudents = React.useMemo(() => {
@@ -93,7 +96,7 @@ export default function Page(): React.JSX.Element {
   // Reset page when search query or filters change
   React.useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterSchool]);
+  }, [searchQuery, filterSchool, startDate, endDate]);
 
   // Filter students based on search query and filters
   const filteredStudents = React.useMemo(() => {
@@ -102,6 +105,27 @@ export default function Page(): React.JSX.Element {
     // Apply school filter
     if (filterSchool) {
       filtered = filtered.filter((student) => student.defaultSchool === filterSchool);
+    }
+
+    // Apply date range filter (based on local timezone)
+    if (startDate || endDate) {
+      filtered = filtered.filter((student) => {
+        if (!student.joiningTimestamp) return false;
+        const timestamp = student.joiningTimestamp > 1e12 
+          ? student.joiningTimestamp 
+          : student.joiningTimestamp * 1000;
+        // Convert timestamp to local date string (YYYY-MM-DD) to match what's displayed in table
+        const studentDateStr = dayjs(timestamp).format('YYYY-MM-DD');
+        
+        if (startDate && endDate) {
+          return studentDateStr >= startDate && studentDateStr <= endDate;
+        } else if (startDate) {
+          return studentDateStr >= startDate;
+        } else if (endDate) {
+          return studentDateStr <= endDate;
+        }
+        return true;
+      });
     }
 
     // Apply search query filter
@@ -129,7 +153,7 @@ export default function Page(): React.JSX.Element {
     }
 
     return filtered;
-  }, [allStudents, searchQuery, filterSchool]);
+  }, [allStudents, searchQuery, filterSchool, startDate, endDate]);
 
   // Sort students
   const students = React.useMemo(() => {
@@ -219,26 +243,71 @@ export default function Page(): React.JSX.Element {
     <Stack spacing={3}>
       <Typography variant="h4">Students</Typography>
 
-      <Card sx={{ p: 2 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>School</InputLabel>
-            <Select
-              value={filterSchool}
-              label="School"
-              onChange={(e) => setFilterSchool(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>All Schools</em>
-              </MenuItem>
-              {schoolOptions.map((school) => (
-                <MenuItem key={school} value={school}>
-                  {school}
+      <Card sx={{ p: 1.5 }}>
+        <Box
+          sx={{
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            '&::-webkit-scrollbar': {
+              height: 6,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0,0,0,0.2)',
+              borderRadius: 3,
+            },
+            mx: { xs: -1.5, sm: 0 },
+            px: { xs: 1.5, sm: 0 },
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1.5}
+            p={1}
+            flexWrap={{ xs: 'nowrap', sm: 'wrap' }}
+            sx={{ minWidth: 'max-content' }}
+          >
+            <FormControl size="small" sx={{ minWidth: 150, flexShrink: 0 }}>
+              <InputLabel>School</InputLabel>
+              <Select
+                value={filterSchool}
+                label="School"
+                onChange={(e) => setFilterSchool(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>All Schools</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
+                {schoolOptions.map((school) => (
+                  <MenuItem key={school} value={school}>
+                    {school}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
+              label="Start Date"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+            <TextField
+              size="small"
+              label="End Date"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ minWidth: 150, flexShrink: 0 }}
+            />
+          </Stack>
+        </Box>
       </Card>
 
       <Card>
